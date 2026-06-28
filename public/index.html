@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Accessibility Checker</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --border: #2a2d3a;
+      --text: #e8eaf0;
+      --muted: #8b8fa8;
+      --accent: #6c63ff;
+      --accent-glow: rgba(108, 99, 255, 0.15);
+      --critical: #ff4d6d;
+      --serious: #ff8c42;
+      --moderate: #ffd166;
+      --minor: #06d6a0;
+      --pass: #06d6a0;
+      --radius: 10px;
+      --mono: 'Courier New', monospace;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      min-height: 100vh;
+      line-height: 1.6;
+    }
+
+    /* ── Header ── */
+    header {
+      padding: 3rem 1.5rem 2rem;
+      text-align: center;
+      border-bottom: 1px solid var(--border);
+    }
+    .logo {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 1.5rem;
+    }
+    .logo-dot { width: 8px; height: 8px; background: var(--accent); border-radius: 50%; }
+    h1 {
+      font-size: clamp(1.8rem, 4vw, 2.8rem);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1.2;
+      margin-bottom: 0.75rem;
+    }
+    h1 span { color: var(--accent); }
+    .subtitle { color: var(--muted); font-size: 1rem; max-width: 480px; margin: 0 auto; }
+
+    /* ── Scan form ── */
+    .scan-wrap {
+      max-width: 680px;
+      margin: 2.5rem auto;
+      padding: 0 1.5rem;
+    }
+    .scan-form {
+      display: flex;
+      gap: 0.5rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.4rem 0.4rem 0.4rem 1rem;
+      transition: border-color 0.2s;
+    }
+    .scan-form:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+    .scan-form input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text);
+      font-size: 1rem;
+      min-width: 0;
+    }
+    .scan-form input::placeholder { color: var(--muted); }
+    .scan-btn {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 7px;
+      padding: 0.65rem 1.4rem;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: opacity 0.15s;
+    }
+    .scan-btn:hover { opacity: 0.88; }
+    .scan-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* ── Status ── */
+    .status {
+      text-align: center;
+      padding: 1rem;
+      color: var(--muted);
+      font-size: 0.9rem;
+      display: none;
+    }
+    .status.visible { display: block; }
+    .spinner {
+      display: inline-block;
+      width: 16px; height: 16px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+      margin-right: 0.5rem;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Error ── */
+    .error-box {
+      max-width: 680px;
+      margin: 0 auto 1.5rem;
+      padding: 0 1.5rem;
+      display: none;
+    }
+    .error-box.visible { display: block; }
+    .error-inner {
+      background: rgba(255, 77, 109, 0.1);
+      border: 1px solid rgba(255, 77, 109, 0.3);
+      border-radius: var(--radius);
+      padding: 1rem 1.2rem;
+      color: var(--critical);
+      font-size: 0.9rem;
+    }
+
+    /* ── Results ── */
+    #results { display: none; max-width: 860px; margin: 0 auto; padding: 0 1.5rem 4rem; }
+    #results.visible { display: block; }
+
+    /* Score card */
+    .score-card {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 1.5rem 2rem;
+      align-items: center;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.8rem 2rem;
+      margin-bottom: 1.5rem;
+    }
+    .score-ring {
+      position: relative;
+      width: 110px; height: 110px;
+      flex-shrink: 0;
+    }
+    .score-ring svg { transform: rotate(-90deg); }
+    .score-ring circle { fill: none; stroke-width: 8; }
+    .score-ring .track { stroke: var(--border); }
+    .score-ring .fill { stroke: var(--accent); stroke-linecap: round; transition: stroke-dashoffset 0.8s ease; }
+    .score-num {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.8rem;
+      font-weight: 700;
+      line-height: 1;
+    }
+    .score-num small { font-size: 0.65rem; color: var(--muted); font-weight: 400; margin-top: 2px; }
+    .score-meta h2 { font-size: 1.1rem; margin-bottom: 0.4rem; }
+    .score-url { font-size: 0.82rem; color: var(--muted); word-break: break-all; margin-bottom: 1rem; }
+    .pill-row { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      font-size: 0.78rem;
+      font-weight: 600;
+      padding: 0.25rem 0.65rem;
+      border-radius: 100px;
+    }
+    .pill.critical { background: rgba(255,77,109,0.12); color: var(--critical); }
+    .pill.serious  { background: rgba(255,140,66,0.12); color: var(--serious); }
+    .pill.moderate { background: rgba(255,209,102,0.12); color: var(--moderate); }
+    .pill.minor    { background: rgba(6,214,160,0.12); color: var(--minor); }
+    .pill.pass     { background: rgba(6,214,160,0.08); color: var(--pass); }
+
+    /* Estimate banner */
+    .estimate-banner {
+      background: var(--accent-glow);
+      border: 1px solid rgba(108,99,255,0.25);
+      border-radius: var(--radius);
+      padding: 1rem 1.4rem;
+      margin-bottom: 1.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.8rem;
+    }
+    .estimate-banner p { font-size: 0.9rem; color: var(--text); }
+    .estimate-banner strong { color: var(--accent); }
+    .cta-btn {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 7px;
+      padding: 0.55rem 1.2rem;
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+    }
+    .cta-btn:hover { opacity: 0.88; }
+
+    /* Violations list */
+    .section-label {
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin: 1.8rem 0 0.75rem;
+    }
+    .violation-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 0.75rem;
+      overflow: hidden;
+    }
+    .violation-header {
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+      padding: 1rem 1.2rem;
+      cursor: pointer;
+      user-select: none;
+    }
+    .violation-header:hover { background: rgba(255,255,255,0.02); }
+    .impact-badge {
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      padding: 0.2rem 0.55rem;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+    .impact-badge.critical { background: rgba(255,77,109,0.15); color: var(--critical); }
+    .impact-badge.serious  { background: rgba(255,140,66,0.15); color: var(--serious); }
+    .impact-badge.moderate { background: rgba(255,209,102,0.15); color: var(--moderate); }
+    .impact-badge.minor    { background: rgba(6,214,160,0.12);  color: var(--minor); }
+    .violation-title { flex: 1; font-size: 0.95rem; font-weight: 500; }
+    .violation-count { font-size: 0.8rem; color: var(--muted); flex-shrink: 0; }
+    .chevron { color: var(--muted); transition: transform 0.2s; flex-shrink: 0; }
+    .violation-card.open .chevron { transform: rotate(180deg); }
+
+    .violation-body {
+      display: none;
+      padding: 0 1.2rem 1.2rem;
+      border-top: 1px solid var(--border);
+    }
+    .violation-card.open .violation-body { display: block; }
+
+    .info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin: 1rem 0;
+    }
+    @media (max-width: 560px) { .info-grid { grid-template-columns: 1fr; } }
+    .info-block h4 { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 0.35rem; }
+    .info-block p { font-size: 0.88rem; line-height: 1.55; }
+
+    .wcag-tag {
+      display: inline-block;
+      font-size: 0.72rem;
+      font-weight: 600;
+      background: rgba(108,99,255,0.12);
+      color: var(--accent);
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      margin-bottom: 1rem;
+    }
+
+    .examples-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 1rem 0 0.5rem; }
+    .code-block {
+      background: #0a0c12;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.7rem 0.9rem;
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      color: #a9b1d6;
+      overflow-x: auto;
+      margin-bottom: 0.5rem;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    .no-issues {
+      text-align: center;
+      padding: 3rem 1rem;
+      color: var(--pass);
+      font-size: 1.1rem;
+    }
+
+    @media (max-width: 600px) {
+      .score-card { grid-template-columns: 1fr; justify-items: center; text-align: center; }
+      .pill-row { justify-content: center; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo"><span class="logo-dot"></span> Accessibility Checker</div>
+  <h1>Find what's breaking<br><span>your site's accessibility</span></h1>
+  <p class="subtitle">Enter any URL and get a free instant report with real fixes, not just a list of problems.</p>
+</header>
+
+<div class="scan-wrap">
+  <div class="scan-form">
+    <input type="text" id="urlInput" placeholder="https://yourwebsite.com" autocomplete="off" />
+    <button class="scan-btn" id="scanBtn">Scan site</button>
+  </div>
+</div>
+
+<div class="status" id="status">
+  <span class="spinner"></span> Scanning — this takes about 15–30 seconds…
+</div>
+
+<div class="error-box" id="errorBox">
+  <div class="error-inner" id="errorMsg"></div>
+</div>
+
+<div id="results">
+  <!-- injected by JS -->
+</div>
+
+<script>
+  const urlInput = document.getElementById('urlInput');
+  const scanBtn  = document.getElementById('scanBtn');
+  const status   = document.getElementById('status');
+  const errorBox = document.getElementById('errorBox');
+  const errorMsg = document.getElementById('errorMsg');
+  const results  = document.getElementById('results');
+
+  urlInput.addEventListener('keydown', e => { if (e.key === 'Enter') runScan(); });
+  scanBtn.addEventListener('click', runScan);
+
+  async function runScan() {
+    const url = urlInput.value.trim();
+    if (!url) { urlInput.focus(); return; }
+
+    // Reset UI
+    results.classList.remove('visible');
+    results.innerHTML = '';
+    errorBox.classList.remove('visible');
+    status.classList.add('visible');
+    scanBtn.disabled = true;
+
+    try {
+      const res = await fetch('/api/scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url })
+      });
+      const data = await res.json();
+
+      if (!res.ok) throw new Error(data.error || 'Scan failed.');
+
+      renderResults(data);
+    } catch (err) {
+      errorMsg.textContent = err.message || 'Something went wrong. Please try again.';
+      errorBox.classList.add('visible');
+    } finally {
+      status.classList.remove('visible');
+      scanBtn.disabled = false;
+    }
+  }
+
+  function scoreColour(score) {
+    if (score >= 80) return '#06d6a0';
+    if (score >= 50) return '#ffd166';
+    return '#ff4d6d';
+  }
+
+  function renderResults(data) {
+    const { url, score, summary, violations } = data;
+    const colour = scoreColour(score);
+    const circ = 2 * Math.PI * 46; // r=46
+
+    let html = `
+      <div class="score-card">
+        <div class="score-ring">
+          <svg width="110" height="110" viewBox="0 0 110 110">
+            <circle class="track" cx="55" cy="55" r="46"/>
+            <circle class="fill" cx="55" cy="55" r="46"
+              stroke="${colour}"
+              stroke-dasharray="${circ}"
+              stroke-dashoffset="${circ - (score / 100) * circ}"/>
+          </svg>
+          <div class="score-num" style="color:${colour}">${score}<small>/100</small></div>
+        </div>
+        <div class="score-meta">
+          <h2>Accessibility score</h2>
+          <p class="score-url">${escHtml(url)}</p>
+          <div class="pill-row">
+            ${summary.critical ? `<span class="pill critical">● ${summary.critical} critical</span>` : ''}
+            ${summary.serious  ? `<span class="pill serious">● ${summary.serious} serious</span>`   : ''}
+            ${summary.moderate ? `<span class="pill moderate">● ${summary.moderate} moderate</span>`: ''}
+            ${summary.minor    ? `<span class="pill minor">● ${summary.minor} minor</span>`         : ''}
+            <span class="pill pass">✓ ${summary.passes} checks passed</span>
+          </div>
+        </div>
+      </div>`;
+
+    if (violations.length) {
+      html += `
+        <div class="estimate-banner">
+          <p>Estimated fix time: <strong>${escHtml(summary.estimatedFix)}</strong> — we can handle all of this for you.</p>
+          <a class="cta-btn" href="mailto:you@yoursite.com?subject=Accessibility fix quote for ${encodeURIComponent(url)}">Get a fix quote</a>
+        </div>`;
+
+      const groups = [
+        { key: 'critical', label: 'Critical issues' },
+        { key: 'serious',  label: 'Serious issues' },
+        { key: 'moderate', label: 'Moderate issues' },
+        { key: 'minor',    label: 'Minor issues' },
+      ];
+
+      groups.forEach(({ key, label }) => {
+        const items = data.grouped[key];
+        if (!items.length) return;
+        html += `<p class="section-label">${label}</p>`;
+        items.forEach((v, i) => { html += violationCard(v, key, i); });
+      });
+    } else {
+      html += `<div class="no-issues">🎉 No accessibility violations found — great work!</div>`;
+    }
+
+    results.innerHTML = html;
+    results.classList.add('visible');
+
+    // Accordion
+    results.querySelectorAll('.violation-header').forEach(header => {
+      header.addEventListener('click', () => {
+        header.closest('.violation-card').classList.toggle('open');
+      });
+    });
+  }
+
+  function violationCard(v, impact, i) {
+    return `
+      <div class="violation-card">
+        <div class="violation-header">
+          <span class="impact-badge ${impact}">${impact}</span>
+          <span class="violation-title">${escHtml(v.help)}</span>
+          <span class="violation-count">${v.affectedCount} element${v.affectedCount !== 1 ? 's' : ''}</span>
+          <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+        <div class="violation-body">
+          ${v.wcag ? `<span class="wcag-tag">${escHtml(v.wcag)}</span>` : ''}
+          <div class="info-grid">
+            ${v.why ? `<div class="info-block"><h4>Why it matters</h4><p>${escHtml(v.why)}</p></div>` : ''}
+            ${v.fix ? `<div class="info-block"><h4>How to fix it</h4><p>${escHtml(v.fix)}</p></div>` : ''}
+          </div>
+          ${v.examples.length ? `
+            <p class="examples-label">Affected elements (first ${v.examples.length})</p>
+            ${v.examples.map(ex => `<div class="code-block">${escHtml(ex.html)}</div>`).join('')}
+          ` : ''}
+          <a href="${escHtml(v.helpUrl)}" target="_blank" rel="noopener" style="font-size:0.8rem;color:var(--accent);">
+            Full WCAG guidance ↗
+          </a>
+        </div>
+      </div>`;
+  }
+
+  function escHtml(str) {
+    return String(str ?? '')
+      .replace(/&/g,'&amp;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;');
+  }
+</script>
+</body>
+</html>
