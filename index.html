@@ -383,6 +383,7 @@
 
       renderResults(data);
     } catch (err) {
+      console.log(err.message);
       errorMsg.textContent = err.message || 'Something went wrong. Please try again.';
       errorBox.classList.add('visible');
     } finally {
